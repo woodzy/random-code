@@ -1,40 +1,135 @@
 <?php
 
-$aryN = array();
-$aryK = array();
-
-function is_prime($i)
+class BloomFilter
 {
-    if($i % 2 != 1) return false;
-    $d = 3;
-    $x = sqrt($i);
-   while ($i % $d != 0 && $d < $x) $d += 2;
-   return (($i % $d == 0 && $i != $d) * 1) == 0 ? true : false;
-}
+  private $M;
+  private $K;
+  private $MLen;
+  private $aryK;
+  private $filter;
+  private $fps;
+  private $inserted;
 
-$upperN = 5;
-$upperK = 3;
-
-for ($i = 0; $i < $upperN; $i++)
-  $aryN[$i] = mt_rand(0,mt_getrandmax());
-
-for ($k = 20; $k < 100000; $k++)
-{
-  if (is_prime($k))
+  function __construct($bitLength, $hashFunctions)
   {
-    $aryK[$j] = $k;
-    $j++;
-    if ($j > $upperK)
-      break;
+    $this->M = $bitLength;
+    $this->K = $hashFunctions;
+    $this->MLen = ceil($this->M/(PHP_INT_SIZE*8.0));
+
+    $this->inserted = 0;
+
+    $this->filter = array();
+    $this->aryK = array();
+
+    for ($k = 0; $k < $this->K; $k++)
+    {
+      $this->aryK[$k] = mt_rand(0,mt_getrandmax());;
+    }
+  }
+
+  function add($item)
+  {
+    $type = gettype($item);
+
+    if ($type == "integer")
+    {
+    }
+    else if ($type == "string")
+    {
+      $item = abs(crc32($item));
+    }
+    else 
+    {
+      throw new Exception();
+    }
+
+    $collision = array();
+
+    for ($j = 0; $j < $this->K; $j++)
+    {
+      $index = intval(bcmod(bcmul($this->aryK[$j],$item),$this->M));
+      $fIndex = floor($index/(PHP_INT_SIZE*8));
+      $val = ($this->filter[$fIndex] >> ($index % $this->M)) & 1;
+      $collision[$j] = $val;
+      echo " ". $index . ",";
+
+      $this->filter[$fIndex] = 
+        $this->filter[$fIndex] | (1 << ($index % $this->M));
+    }
+
+    $this->inserted++;
+
+    for ($j = 0; $j < $this->K; $j++)
+    {
+      if (!$collision[$j])
+        break;
+    }
+
+    if ($j >= $this->K)
+    {
+      $this->fps++;
+      echo " -- collision found";
+    }
+  }
+
+  function check($item)
+  {
+    $type = gettype($item);
+    if ($type == "string")
+    {
+      $item = abs(crc32($item));
+    }
+    else if ($type != "integer")
+    {
+      throw new Exception();
+    }
+
+    $collision = array();
+
+    for ($j = 0; $j < $this->K; $j++)
+    {
+      $index = intval(bcmod(bcmul($this->aryK[$j],$item),$this->M));
+      $fIndex = floor($index/(PHP_INT_SIZE*8));
+      $val = ($this->filter[$fIndex] >> ($index % $this->M)) & 1;
+      $collision[$j] = $val;
+    }
+
+    for ($j = 0; $j < $this->K; $j++)
+    {
+      if (!$collision[$j])
+        break;
+    }
+
+    if ($j >= $this->K)
+    {
+      return true;
+    }
+    else 
+      return false;
+  }
+
+  function fpPercent()
+  {
+    $exp = (-1 * $this->K * $this->inserted) / ($this->M * 1.0);
+    return pow(1 - exp($exp), $this->K);
+  }
+
+  function printFilter()
+  {
+    $str = '';
+    for ($k = 0; $k < $this->MLen; $k++)
+    {
+      for ($i = 0; $i < PHP_INT_SIZE*8; $i++)
+        $str .= ($this->filter[$k] >> $i) & 1;
+    }
+
+    return $str;
+  }
+
+  function getCollisionRate()
+  {
+    return $this->fps/($this->M * 1.0);
   }
 }
 
-for ($i = 0; $i < $upperN; $i++)
-{
-  echo "num: ". $aryN[$i];
-  for ($j = 0; $j < $upperK; $j++)
-  {
-    echo " ". bcmod(bcmul($aryK[$j],$aryN[$i]),32) . ",";
-  }
-  echo "\n";
-}
+# vim: set ai cin sw=2 expandtab:
